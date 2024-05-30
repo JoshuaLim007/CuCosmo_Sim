@@ -25,7 +25,7 @@ int main() {
 	auto render_texture = SDL_CreateTexture(renderer, SDL_PixelFormatEnum::SDL_PIXELFORMAT_BGR888, SDL_TextureAccess::SDL_TEXTUREACCESS_STREAMING, WIDTH, HEIGHT);
 
 	init_cuda_renderer(WIDTH, HEIGHT, 3);
-	init_nbody(250000, 0, 1, 10, make_float2(0,0), make_float2(WIDTH, HEIGHT), false);
+	init_nbody(100000, time(NULL), 1, 10, make_float2(0, 0), make_float2(WIDTH, HEIGHT), true);
 
 	static bool running = true;
 	static float colorScale = 1000.0f;

@@ -329,13 +329,25 @@ void init_nbody(int count, int seed, float minMass, float maxMass, float2 spaceL
             neg_count++;
         }
 
-        if (black_hole_count == ceilf((float)count * 0.25)) {
-            h_Bodies[i].mass = maxMass * frandom(1000, 10000);
-            black_hole_count = 0;
+        if (spiral) {
+            if (black_hole_count == count - 1) {
+                h_Bodies[i].mass = frandom(spiral_center_mass * .1, spiral_center_mass * 0.25);
+                black_hole_count = 0;
+            }
+            else {
+                black_hole_count++;
+            }
         }
         else {
-            black_hole_count++;
+            if (black_hole_count == ceilf((float)count * 0.25)) {
+                h_Bodies[i].mass = maxMass * frandom(1000, 10000);
+                black_hole_count = 0;
+            }
+            else {
+                black_hole_count++;
+            }
         }
+
 
         total_system_mass += h_Bodies[i].mass > 0.0 ? h_Bodies[i].mass : 0.0;
     }
