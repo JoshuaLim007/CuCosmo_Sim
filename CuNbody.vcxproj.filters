@@ -1,0 +1,35 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="main.cpp">
+      <Filter>sources</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="cuda_kernal.h">
+      <Filter>sources</Filter>
+    </ClInclude>
+    <ClInclude Include="helper_math.h">
+      <Filter>sources</Filter>
+    </ClInclude>
+    <ClInclude Include="SDL_image.h">
+      <Filter>sources</Filter>
+    </ClInclude>
+    <ClInclude Include="sdl_input_manager.h">
+      <Filter>sources</Filter>
+    </ClInclude>
+    <ClInclude Include="linear_quadtree.h">
+      <Filter>sources</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="sources">
+      <UniqueIdentifier>{bafe200a-8c80-4df6-8d15-be8c6df1f780}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <CudaCompile Include="cuda_kernal.cu">
+      <Filter>sources</Filter>
+    </CudaCompile>
+  </ItemGroup>
+</Project>

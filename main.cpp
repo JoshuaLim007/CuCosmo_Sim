@@ -1,9 +1,15 @@
 #include <SDL.h>
+#include "SDL_image.h"
+
 #undef main
 
 #include <iostream>
 #include "cuda_kernal.h"
 #include "sdl_input_manager.h"
+#include <chrono>
+#include <string>
+#include <direct.h>
+#include "linear_quadtree.h";
 
 #define WIDTH 1280
 #define HEIGHT 1280
@@ -13,6 +19,37 @@ void handle_input(void(*callback)(SDL_Event &e)) {
 	while (SDL_PollEvent(&e)) {
 		callback(e);
 	}
+}
+
+void save_texture(const char* file_name, SDL_Renderer* renderer, SDL_Texture* texture) {
+	SDL_Texture* target = SDL_GetRenderTarget(renderer);
+	SDL_SetRenderTarget(renderer, texture);
+	int width, height;
+	SDL_QueryTexture(texture, NULL, NULL, &width, &height);
+	SDL_Surface* surface = SDL_CreateRGBSurface(0, width, height, 32, 0, 0, 0, 0);
+	SDL_RenderReadPixels(renderer, NULL, surface->format->format, surface->pixels, surface->pitch);
+	IMG_SavePNG(surface, file_name);
+	SDL_FreeSurface(surface);
+	SDL_SetRenderTarget(renderer, target);
+}
+
+void create_bht(int maxdepth, Node* tree, Body* bodies, int count) {
+	float2 min;
+	float2 max;
+	Point* points = (Point*)bodies;
+	find_bounding_box(points, count, min, max);
+	for (size_t i = 0; i < count; i++)
+	{
+		Point p = points[i];
+		insert_point(0, 0, maxdepth, tree, min, max, p);
+	}
+}
+void clear_bht(Node* tree, int depth) {
+	int len = get_quad_tree_length(depth);
+	memset(tree, 0, sizeof(Node) * len);
+}
+void delete_bht(Node* tree) {
+	delete[] tree;
 }
 
 int main() {
@@ -25,14 +62,35 @@ int main() {
 	auto render_texture = SDL_CreateTexture(renderer, SDL_PixelFormatEnum::SDL_PIXELFORMAT_BGR888, SDL_TextureAccess::SDL_TEXTUREACCESS_STREAMING, WIDTH, HEIGHT);
 
 	init_cuda_renderer(WIDTH, HEIGHT, 3);
-	init_nbody(100000, time(NULL), 1, 10, make_float2(0, 0), make_float2(WIDTH, HEIGHT), true);
+	constexpr int BodyCount = 1000000;
+	Body* bodies = init_nbody(BodyCount, time(NULL), 1, 10, make_float2(0, 0), make_float2(WIDTH, HEIGHT), true);
+
+	Node* tree = create_tree(11);
+	auto t0 = std::chrono::high_resolution_clock::now();
+	clear_bht(tree, 11);
+	create_bht(11, tree, bodies, BodyCount);
+	auto t1 = std::chrono::high_resolution_clock::now();
+	auto total = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+	fprintf(stderr, "%lld ms\n", total);
+	delete_bht(tree);
+	
+	getchar();
 
 	static bool running = true;
-	static float colorScale = 1000.0f;
+	static float colorScale = 50.0f;
 	static float renderScale = 0.5f;
 	static float2 renderOffset = make_float2(0,0);
 	static bool blur = true;
 	SDL_InputManager inputManager;
+	int image_count = 0;
+	
+	constexpr int frame_rate = 60;
+	constexpr int total_time = 0;
+	constexpr int max_images = total_time * frame_rate;
+
+	std::string temp_render_folder = "D:\\joshu\\Pictures\\ndboy_image_saves\\temp\\";
+	int s = mkdir("D:\\joshu\\Pictures\\ndboy_image_saves\\");
+	s = mkdir(temp_render_folder.c_str());
 
 	while (running) {
 		inputManager.SetState();
@@ -90,11 +148,27 @@ int main() {
 		SDL_LockTexture(render_texture, NULL, (void**)&pixels, &pitch);
 		
 		clear_rt();
+		auto t0 = std::chrono::high_resolution_clock::now();
+
 		tick(.01, colorScale, renderScale, renderOffset);
 		render_to_rt(pixels, blur);
 
+		auto t1 = std::chrono::high_resolution_clock::now();
+		auto total = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+		fprintf(stderr, "%lld ms\n", total);
 		SDL_UnlockTexture(render_texture);
-	
+		
+		if (image_count < max_images) {
+			float progress = (float)image_count / max_images;
+			auto result = temp_render_folder + "img_" + std::to_string(image_count) + ".png";
+			save_texture(result.c_str(), renderer, render_texture);
+			std::cout << "Render Progress: " << progress << std::endl;
+		}
+		else if(image_count == max_images) {
+			fprintf(stderr, "Rendering finished!\n");
+		}
+
+		image_count++;
 		SDL_RenderCopy(renderer, render_texture, NULL, NULL);
 		SDL_RenderPresent(renderer);
 

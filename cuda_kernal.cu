@@ -14,14 +14,9 @@
         }                                                                   \
     } while (0)
 
-struct Body {
-    float2 position;
-    float2 velocity;
-    float accel;
-    float previous_accel;
-    float mass;
-};
+
 Body* d_Bodies;
+Body_Info* d_Bodies_ext;
 
 inline float flerp(float min, float max, float t) {
     return min * (1 - t) + max * (t);
@@ -161,7 +156,7 @@ __constant__ constexpr float MASS_SCALE = 1.0f;
 Body* h_Bodies;
 int body_count;
 
-__global__ void calculate_nbody(Body* bodies, int lowBound, int upBound, int count, float delta) {
+__global__ void calculate_nbody(Body* bodies, Body_Info* bodies_ext, int lowBound, int upBound, int count, float delta) {
 
     int midx = threadIdx.x + blockDim.x * blockIdx.x;
     if (midx >= count) {
@@ -169,8 +164,9 @@ __global__ void calculate_nbody(Body* bodies, int lowBound, int upBound, int cou
     }
 
     Body me = bodies[midx];
+    Body_Info me_ext = bodies_ext[midx];
 
-    float2 curVel = me.velocity;
+    float2 curVel = me_ext.velocity;
     float2 total_force;
 
     for (size_t i = lowBound; i < upBound; i++)
@@ -199,20 +195,20 @@ __global__ void calculate_nbody(Body* bodies, int lowBound, int upBound, int cou
             curVel += force * delta / abs(me.mass * MASS_SCALE);
         }
     }
+    me.position += curVel * delta;
 
     //needed to avoid flickering
     float total_accel_length = length(total_force) / abs(me.mass * MASS_SCALE);
     float f0 = 1 / (1 + total_accel_length);
-    float f1 = 1 / (1 + me.previous_accel);
-    me.accel = (total_accel_length * f0 + me.previous_accel * f1) / (f0 + f1);
-    me.accel = max(me.accel, 0.0f);
-    me.previous_accel = total_accel_length;
-    me.previous_accel = max(me.previous_accel, 0.0f);
-
-    me.velocity = curVel;
-    me.position += curVel * delta;
+    float f1 = 1 / (1 + me_ext.previous_accel);
+    if (f0 != 0 || f1 != 0) {
+        me_ext.accel = max((total_accel_length * f0 + me_ext.previous_accel * f1) / (f0 + f1), 0.0f);
+    }
+    me_ext.previous_accel = max(total_accel_length, 0.0f);
+    me_ext.velocity = curVel;
 
     bodies[midx] = me;
+    bodies_ext[midx] = me_ext;
 }
 
 __device__ float4 get_color_from_value(float value, float scale) {
@@ -251,13 +247,14 @@ __device__ float4 get_color_from_value(float value, float scale) {
     return finalCol;
 }
 
-__global__ void draw_bodies(Body* bodies, int count, uint8_t* outTexture, float colorScale, float renderScale, float2 renderOffset) {
+__global__ void draw_bodies(Body* bodies, Body_Info* bodies_ext, int count, uint8_t* outTexture, float colorScale, float renderScale, float2 renderOffset) {
 
     int midx = threadIdx.x + blockDim.x * blockIdx.x;
     if (midx >= count) {
         return;
     }
     Body me = bodies[midx];
+    Body_Info me_ext = bodies_ext[midx];
 
     float2 mid_f = make_float2(d_texture_size.x, d_texture_size.y) * 0.5;
     float2 coord_f = make_float2(me.position.x + renderOffset.x, me.position.y + renderOffset.y);
@@ -269,7 +266,7 @@ __global__ void draw_bodies(Body* bodies, int count, uint8_t* outTexture, float 
     int2 coord = make_int2(floor(coord_f.x), floor(coord_f.y));
     if (coord.x > 0 && coord.x < d_texture_size.x
         && coord.y > 0 && coord.y < d_texture_size.y) {
-        float val = me.accel;
+        float val = me_ext.accel;
         float4 color = get_color_from_value(val, colorScale);
         set_pixel(outTexture, color, coord);
     }
@@ -290,10 +287,13 @@ float2 get_random_direction() {
     return dir;
 }
 
-void init_nbody(int count, int seed, float minMass, float maxMass, float2 spaceLow, float2 spaceHigh, bool spiral) {
+Body* init_nbody(int count, int seed, float minMass, float maxMass, float2 spaceLow, float2 spaceHigh, bool spiral) {
     int memSize = sizeof(Body) * count;
+    int memSize_ext = sizeof(Body_Info) * count;
     h_Bodies = (Body*)malloc(memSize);
+    auto h_Bodies_ext = (Body_Info*)malloc(memSize_ext);
     memset(h_Bodies, 0, memSize);
+    memset(h_Bodies_ext, 0, memSize_ext);
     srand(seed);
 
     float2 midPoint = (spaceHigh + spaceLow) * 0.5f;
@@ -318,8 +318,8 @@ void init_nbody(int count, int seed, float minMass, float maxMass, float2 spaceL
             h_Bodies[i].position = midPoint + get_random_direction() * extentLength;
         }
 
-        h_Bodies[i].velocity.x = 0;
-        h_Bodies[i].velocity.y = 0;
+        h_Bodies_ext[i].velocity.x = 0;
+        h_Bodies_ext[i].velocity.y = 0;
 
         if (neg_count == 63) {
             h_Bodies[i].mass *= -63.0f;
@@ -362,31 +362,37 @@ void init_nbody(int count, int seed, float minMass, float maxMass, float2 spaceL
             float3 velocity_dir = normalize(cross(dir2mid3, cross_dir));
             float orbit_speed = sqrt(GRAV_CONST * (total_system_mass + spiral_center_mass / DIST_SCALE) / dist);
             float2 vel2 = make_float2(velocity_dir.x, velocity_dir.y) * orbit_speed;
-            h_Bodies[i].velocity = vel2;
+            h_Bodies_ext[i].velocity = vel2;
         }
     }
 
     if (spiral) {
         h_Bodies[0].mass = spiral_center_mass;
         h_Bodies[0].position = midPoint;
-        h_Bodies[0].velocity *= 0;
+        h_Bodies_ext[0].velocity *= 0;
     }
 
     body_count = count;
     CUDA_CHECK(cudaMalloc(&d_Bodies, memSize));
+    CUDA_CHECK(cudaMalloc(&d_Bodies_ext, memSize_ext));
     CUDA_CHECK(cudaMemset(d_Bodies, 0, memSize));
+    CUDA_CHECK(cudaMemset(d_Bodies_ext, 0, memSize_ext));
+
     CUDA_CHECK(cudaMemcpy(d_Bodies, h_Bodies, memSize, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_Bodies_ext, h_Bodies_ext, memSize, cudaMemcpyHostToDevice));
+
     CUDA_CHECK(cudaDeviceSynchronize());
-    free(h_Bodies);
+    free(h_Bodies_ext);
+    return h_Bodies;
 }
 
 void tick(float deltaTime, float colorScale, float renderScale, float2 renderOffset) {
     dim3 threads = dim3(64, 1, 1);
     dim3 blocks = dim3((uint)ceilf((float)body_count / threads.x), 1, 1);
 
-    calculate_nbody << <blocks, threads >> > (d_Bodies, 0, body_count, body_count, deltaTime);
+    calculate_nbody << <blocks, threads >> > (d_Bodies, d_Bodies_ext, 0, body_count, body_count, deltaTime);
     CUDA_CHECK(cudaDeviceSynchronize());
 
-    draw_bodies << <blocks, threads >> > (d_Bodies, body_count, h_render_texture, colorScale, renderScale, renderOffset);
+    draw_bodies << <blocks, threads >> > (d_Bodies, d_Bodies_ext, body_count, h_render_texture, colorScale, renderScale, renderOffset);
     CUDA_CHECK(cudaDeviceSynchronize());
 }
