@@ -21,6 +21,9 @@
     <ClInclude Include="linear_quadtree.h">
       <Filter>sources</Filter>
     </ClInclude>
+    <ClInclude Include="Timer.h">
+      <Filter>sources</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="sources">

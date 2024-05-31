@@ -95,6 +95,7 @@
     <ClInclude Include="linear_quadtree.h" />
     <ClInclude Include="SDL_image.h" />
     <ClInclude Include="sdl_input_manager.h" />
+    <ClInclude Include="Timer.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -257,15 +257,15 @@ __global__ void draw_bodies(Body* bodies, Body_Info* bodies_ext, int count, uint
     Body_Info me_ext = bodies_ext[midx];
 
     float2 mid_f = make_float2(d_texture_size.x, d_texture_size.y) * 0.5;
-    float2 coord_f = make_float2(me.position.x + renderOffset.x, me.position.y + renderOffset.y);
+    float2 coord_f = make_float2(me.position.x, me.position.y );
 
     coord_f -= mid_f;
     coord_f *= renderScale;
     coord_f += mid_f;
 
-    int2 coord = make_int2(floor(coord_f.x), floor(coord_f.y));
-    if (coord.x > 0 && coord.x < d_texture_size.x
-        && coord.y > 0 && coord.y < d_texture_size.y) {
+    int2 coord = make_int2(floor(coord_f.x + renderOffset.x), floor(coord_f.y + renderOffset.y));
+    if (coord.x >= 0 && coord.x < d_texture_size.x
+        && coord.y >= 0 && coord.y < d_texture_size.y) {
         float val = me_ext.accel;
         float4 color = get_color_from_value(val, colorScale);
         set_pixel(outTexture, color, coord);
@@ -395,4 +395,20 @@ void tick(float deltaTime, float colorScale, float renderScale, float2 renderOff
 
     draw_bodies << <blocks, threads >> > (d_Bodies, d_Bodies_ext, body_count, h_render_texture, colorScale, renderScale, renderOffset);
     CUDA_CHECK(cudaDeviceSynchronize());
+}
+
+Body* fetch_updated_bodies() {
+    CUDA_CHECK(cudaMemcpy(h_Bodies, d_Bodies, body_count * sizeof(Body), cudaMemcpyDeviceToHost));
+    return h_Bodies;
+}
+
+Node* d_bth_ptr;
+int bth_length;
+void init_bth_gpu(int count) {
+    bth_length = count;
+    cudaMallocHost((void**)&d_bth_ptr, count * sizeof(Node));
+    cudaMemset(d_bth_ptr, 0, count * sizeof(Node));
+}
+void push_bth_gpu(Node* tree, int count) {
+    CUDA_CHECK(cudaMemcpy(d_bth_ptr, tree, count * sizeof(Node), cudaMemcpyHostToDevice));
 }

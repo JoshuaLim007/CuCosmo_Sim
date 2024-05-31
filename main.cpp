@@ -3,6 +3,7 @@
 
 #undef main
 
+#include "Timer.h"
 #include <iostream>
 #include "cuda_kernal.h"
 #include "sdl_input_manager.h"
@@ -63,18 +64,22 @@ int main() {
 
 	init_cuda_renderer(WIDTH, HEIGHT, 3);
 	constexpr int BodyCount = 1000000;
-	Body* bodies = init_nbody(BodyCount, time(NULL), 1, 10, make_float2(0, 0), make_float2(WIDTH, HEIGHT), true);
+	Body* bodies = init_nbody(BodyCount, time(NULL), 10, 100, make_float2(0, 0), make_float2(WIDTH, HEIGHT), false);
 
-	Node* tree = create_tree(11);
-	auto t0 = std::chrono::high_resolution_clock::now();
-	clear_bht(tree, 11);
-	create_bht(11, tree, bodies, BodyCount);
-	auto t1 = std::chrono::high_resolution_clock::now();
-	auto total = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
-	fprintf(stderr, "%lld ms\n", total);
-	delete_bht(tree);
+	int tree_depth = 12;
+	int tree_len = get_quad_tree_length(tree_depth);
+	Node* tree = create_tree(tree_depth);
+	init_bth_gpu(tree_len);
+
+	StartTimer();
+	clear_bht(tree, tree_depth);
+	create_bht(tree_depth, tree, bodies, BodyCount);
+	push_bth_gpu(tree, tree_len);
+	EndTimer("Tree creation time: ");
 	
-	getchar();
+	StartTimer();
+	auto updated = fetch_updated_bodies();
+	EndTimer("Download time: ");
 
 	static bool running = true;
 	static float colorScale = 50.0f;
@@ -123,7 +128,7 @@ int main() {
 			}
 		}
 
-		float offset_speed = 10;
+		float offset_speed = 1;
 		if (inputManager.OnKey(SDL_SCANCODE_LSHIFT)) {
 			offset_speed *= 2;
 		}
@@ -146,18 +151,21 @@ int main() {
 		uint8_t* pixels;
 		int pitch = 0;
 		SDL_LockTexture(render_texture, NULL, (void**)&pixels, &pitch);
-		
 		clear_rt();
-		auto t0 = std::chrono::high_resolution_clock::now();
-
+		StartTimer();
+		
 		tick(.01, colorScale, renderScale, renderOffset);
 		render_to_rt(pixels, blur);
 
-		auto t1 = std::chrono::high_resolution_clock::now();
-		auto total = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
-		fprintf(stderr, "%lld ms\n", total);
+		fetch_updated_bodies();
+
+		StartTimer();
+		push_bth_gpu(tree, tree_len);
+		EndTimer("BTH to GPU: ");
+
+
+		EndTimer("Calculation time: ");
 		SDL_UnlockTexture(render_texture);
-		
 		if (image_count < max_images) {
 			float progress = (float)image_count / max_images;
 			auto result = temp_render_folder + "img_" + std::to_string(image_count) + ".png";

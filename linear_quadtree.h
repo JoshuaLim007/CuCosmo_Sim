@@ -1,5 +1,7 @@
 // LinearQuadtree.cpp : This file contains the 'main' function. Program execution begins and ends there.
 //
+#ifndef LINEAR_QT_H
+#define LINEAR_QT_H
 
 #include "float.h"
 #include "math.h"
@@ -15,9 +17,6 @@ struct Node {
     int point_count = 0;
     Point point;
 };
-
-int compression_count = 0;
-int max_compression = 0;
 
 //https://www.youtube.com/watch?v=zuWvrqcZwuU
 inline void get_child_nodes(int parent_node, int &lowBound, int &highBound) {
@@ -59,15 +58,22 @@ inline void insert_point(
     const float2 &max,
     const Point& point) {
 
+    //new node = no point and no children
+    //leaf node = has point and no children
+    //non leaf node = has point and children
+    //error = has no point and has children
+
     //if the currenet node does not carry a point and has no children
     //then insert point into this current node
     bool has_point = quadtree[nodeIndex].point_count > 0;
     bool has_children = quadtree[nodeIndex].has_children;
+    
+    //new node
     if(!has_children && !has_point) {
         quadtree[nodeIndex].point = point;
         quadtree[nodeIndex].point_count++;
     }
-    //if this node has children, or does carry a point, attempt inserting point into a child node
+    //if this node is a leaf node or non leaf node, insert point into a child node
     else if(depth != maxDepth){
 
         //mark this node as having children
@@ -106,15 +112,11 @@ inline void insert_point(
             quadrant++;
         }
 
-        //if the current node carries a point
-        //remove the point from the node and insert it into one of the child nodes
-        if (has_point) {
+        //if the current node carries a point but did not have children (meaning it was a leaf node prior to his operation)
+        //move the point and insert it into one of the child nodes
+        if (has_point && !has_children) {
             quadrant = 0;
             Point current_point = quadtree[nodeIndex].point;
-
-            quadtree[nodeIndex].point_count = 0;
-            quadtree[nodeIndex].point.x = 0;
-            quadtree[nodeIndex].point.y = 0;
 
             for (size_t i = lowBound; i <= highBound; i++)
             {
@@ -133,20 +135,21 @@ inline void insert_point(
                 quadrant++;
             }
         }
+
+        quadtree[nodeIndex].point_count++;
+        quadtree[nodeIndex].point.x += point.x;
+        quadtree[nodeIndex].point.y += point.y;
+        quadtree[nodeIndex].point.mass += point.mass;
+
     }
     //if we reached max depth, compress data into a single data point
     //avoid adding more children
     else {
         quadtree[nodeIndex].has_children = false;
         quadtree[nodeIndex].point_count++;
-
-        if (max_compression < quadtree[nodeIndex].point_count) {
-            max_compression = quadtree[nodeIndex].point_count;
-        }
-
         quadtree[nodeIndex].point.x += point.x;
         quadtree[nodeIndex].point.y += point.y;
-        compression_count++;
+        quadtree[nodeIndex].point.mass += point.mass;
     }
 }
 
@@ -160,3 +163,5 @@ inline Node* create_tree(int max_depth) {
     memset(quad_tree, 0, sizeof(Node) * length);
     return quad_tree;
 }
+
+#endif LINEAR_QT_H
