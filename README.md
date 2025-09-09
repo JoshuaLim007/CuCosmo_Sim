@@ -6,4 +6,4 @@ Features:
  - Janus cosmological model
 
 ### Click thumbnail for video
-[![Video of simulation](https://i.ytimg.com/vi/3asC1AZ48Nc/maxresdefault.jpg)](https://example.com/video.mp4)
+[![Video of simulation](https://i.ytimg.com/vi/3asC1AZ48Nc/maxresdefault.jpg)](https://www.youtube.com/watch?v=3asC1AZ48Nc)
